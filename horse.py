@@ -39,7 +39,7 @@ try:
 except Exception:  # pragma: no cover
     paste_image_button = None  # type: ignore
 
-st.set_page_config(page_title="Multiway Vig + Bet-Back EV", layout="centered")
+st.set_page_config(page_title="Multiway Vig + Bet-Back EV", layout="wide")
 
 
 def _fraction_to_decimal_odds(token: str) -> float | None:
@@ -341,6 +341,8 @@ if "ocr_image" not in st.session_state:
     st.session_state["ocr_image"] = None
 if "ocr_last_fingerprint" not in st.session_state:
     st.session_state["ocr_last_fingerprint"] = None
+if "ocr_last_autofill_fingerprint" not in st.session_state:
+    st.session_state["ocr_last_autofill_fingerprint"] = None
 
 if paste_image_button is None:
     st.error("Clipboard paste requires `streamlit-paste-button`. Install it to enable paste.")
@@ -398,6 +400,16 @@ if img is not None:
                             max_rows=10,
                         )
                         st.success("OCR complete")
+
+                        # Auto-fill the odds inputs by default (once per new paste).
+                        if new_fp != st.session_state.get("ocr_last_autofill_fingerprint"):
+                            parsed_rows = st.session_state.get("ocr_parsed_rows", [])
+                            for i, r in enumerate(parsed_rows[:10]):
+                                st.session_state[f"name_{i}"] = str(r.get("horse", "") or "")
+                                st.session_state[f"win_{i}"] = str(r.get("win_odds", "") or "")
+                                st.session_state[f"place_{i}"] = str(r.get("place_odds", "") or "")
+                            st.session_state["ocr_last_autofill_fingerprint"] = new_fp
+                            st.rerun()
                     except Exception as e:
                         st.error(f"OCR failed: {e}")
 
@@ -417,7 +429,7 @@ if img is not None:
         parsed_rows = st.session_state.get("ocr_parsed_rows", [])
         if parsed_rows:
             st.write("Parsed rows (preview):")
-            st.dataframe(pd.DataFrame(parsed_rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(parsed_rows), use_container_width=True, height=320)
 
             if st.button("Fill odds inputs from parsed rows", key="fill_from_ocr"):
                 for i, r in enumerate(parsed_rows[:10]):
@@ -514,7 +526,7 @@ else:
         )
 
     df = pd.DataFrame(table)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, use_container_width=True, height=520)
 
     st.divider()
     st.subheader("Bet-Back EV on a selected horse")
