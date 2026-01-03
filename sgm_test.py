@@ -21,7 +21,11 @@ def calc_ev(
     offers = [offer1, offer2, offer3]
     for i, p in enumerate(ps):
         if p is None:
-            ps[i] = 1.0 / (offers[i] + house_edge)
+            # Decimal odds implied probability is 1/odds.
+            # Use house_edge as a simple discount on implied probability.
+            implied = 1.0 / offers[i]
+            inferred = implied * (1.0 - house_edge)
+            ps[i] = max(0.0, min(1.0, inferred))
     true_prob1, true_prob2, true_prob3 = ps
 
     win_all = offer1 * offer2 * offer3 * wager
@@ -35,12 +39,11 @@ def calc_ev(
         + true_prob1 * true_prob2 * (1 - true_prob3)
     )
 
-    # NOTE: your p_l2 formula looked wrong in the original code; keeping it for display completeness,
-    # but EV uses only p_wa and p_l1 in your setup.
+    # Exactly two lose (i.e., exactly one wins)
     p_l2 = (
         true_prob1 * (1 - true_prob2) * (1 - true_prob3)
+        + (1 - true_prob1) * true_prob2 * (1 - true_prob3)
         + (1 - true_prob1) * (1 - true_prob2) * true_prob3
-        + (1 - true_prob1) * true_prob2 + (1 - true_prob3)
     )
     p_la = (1 - true_prob1) * (1 - true_prob2) * (1 - true_prob3)
 
@@ -76,7 +79,11 @@ def breakeven_true_prob_bet2_equal_bet3(
     such that EV payout == wager (same EV structure as calc_ev()).
     bet1 fixed. If true_prob1 is None, inferred as 1/(offer1+house_edge).
     """
-    q = true_prob1 if true_prob1 is not None else 1.0 / (offer1 + house_edge)
+    if true_prob1 is not None:
+        q = true_prob1
+    else:
+        implied1 = 1.0 / offer1
+        q = max(0.0, min(1.0, implied1 * (1.0 - house_edge)))
     O = offer1 * (offer23 ** 2)
     B = bonus_val
 
