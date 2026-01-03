@@ -344,6 +344,13 @@ with st.expander("OCR settings", expanded=False):
     )
     st.session_state["tesseract_cmd"] = tesseract_cmd
 
+    # Diagnostics to help with Windows + deployment env mismatches.
+    detected = shutil.which("tesseract")
+    st.caption(
+        f"Python: {sys.executable} | pytesseract: {'ok' if pytesseract is not None else 'missing'} | "
+        f"tesseract (PATH): {detected or 'not found'}"
+    )
+
 img = st.session_state.get("ocr_image")
 if img is not None:
     if Image is None:
