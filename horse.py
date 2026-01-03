@@ -3,6 +3,8 @@ import os
 import re
 import shutil
 import sys
+import hashlib
+import io
 from typing import Any
 
 import pandas as pd
@@ -154,6 +156,15 @@ def parse_win_place_rows_from_text(text: str, max_rows: int = 10) -> list[dict[s
             break
 
     return rows
+
+
+def _image_fingerprint(img) -> str:
+    """Stable-ish fingerprint to detect a new pasted screenshot."""
+    bio = io.BytesIO()
+    # Normalize to reduce trivial differences
+    im = img.convert("RGB")
+    im.save(bio, format="PNG", optimize=True)
+    return hashlib.md5(bio.getvalue()).hexdigest()
 
 
 def ocr_image_to_text(image, tesseract_cmd: str | None = None) -> str:
@@ -328,6 +339,8 @@ if "ocr_parsed_rows" not in st.session_state:
 
 if "ocr_image" not in st.session_state:
     st.session_state["ocr_image"] = None
+if "ocr_last_fingerprint" not in st.session_state:
+    st.session_state["ocr_last_fingerprint"] = None
 
 if paste_image_button is None:
     st.error("Clipboard paste requires `streamlit-paste-button`. Install it to enable paste.")
@@ -358,26 +371,35 @@ if img is not None:
     else:
         st.image(img, caption="Pasted screenshot", use_container_width=True)
 
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            run_ocr = st.button("Run OCR", key="run_ocr")
-        with c2:
-            parse_only = st.button("Parse text", key="parse_ocr")
+        # Auto-run OCR when a new screenshot is pasted.
+        new_fp = None
+        try:
+            new_fp = _image_fingerprint(img)
+        except Exception:
+            new_fp = None
 
-        if run_ocr:
+        should_run = new_fp is not None and new_fp != st.session_state.get("ocr_last_fingerprint")
+        if should_run:
+            st.session_state["ocr_last_fingerprint"] = new_fp
             if pytesseract is None:
                 st.error(
                     "OCR requires `pytesseract` and the Tesseract binary. "
                     "Install `pytesseract` and install Tesseract OCR on Windows (then set PATH or the executable path)."
                 )
             else:
-                try:
-                    st.session_state["ocr_text"] = ocr_image_to_text(
-                        img,
-                        tesseract_cmd=st.session_state.get("tesseract_cmd") or None,
-                    )
-                except Exception as e:
-                    st.error(f"OCR failed: {e}")
+                with st.spinner("Running OCR…"):
+                    try:
+                        st.session_state["ocr_text"] = ocr_image_to_text(
+                            img,
+                            tesseract_cmd=st.session_state.get("tesseract_cmd") or None,
+                        )
+                        st.session_state["ocr_parsed_rows"] = parse_win_place_rows_from_text(
+                            st.session_state.get("ocr_text", ""),
+                            max_rows=10,
+                        )
+                        st.success("OCR complete")
+                    except Exception as e:
+                        st.error(f"OCR failed: {e}")
 
         st.session_state["ocr_text"] = st.text_area(
             "Extracted / editable text",
@@ -386,7 +408,7 @@ if img is not None:
             key="ocr_text_area",
         )
 
-        if parse_only or run_ocr:
+        if st.button("Re-parse text", key="parse_ocr"):
             st.session_state["ocr_parsed_rows"] = parse_win_place_rows_from_text(
                 st.session_state.get("ocr_text", ""),
                 max_rows=10,
@@ -470,6 +492,14 @@ else:
     st.subheader("De-vigged probabilities (used for EV)")
     table = []
     for r, pwin, pplace in zip(valid, vig["p_true_win"], vig["p_true_place"]):
+        ev_row = bet_back_ev_unconditional_place(
+            wager=wager,
+            win_odds=r["win_odds"],
+            place_odds=r["place_odds"],
+            bonus_val=bonus_val,
+            true_prob_win=pwin,
+            true_prob_place_uncond=pplace,
+        )
         table.append(
             {
                 "Horse": r["horse"],
@@ -479,6 +509,7 @@ else:
                 "Implied P(place)": 1.0 / r["place_odds"],
                 "De-vig P(win)": pwin,
                 "De-vig P(place top3)": pplace,  # sums to 3 across horses
+                "Bet-Back EV net ($)": ev_row["ev_net_cash"],
             }
         )
 

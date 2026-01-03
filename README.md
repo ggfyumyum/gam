@@ -10,7 +10,8 @@ Install deps:
 
 Run:
 
-- `streamlit run horse.py`
+- Preferred (always uses the project venv): `./run_horse.ps1`
+- Or: `C:\Users\logan\Documents\HT\gam\.venv\Scripts\python.exe -m streamlit run horse.py`
 
 ### OCR on Windows
 
@@ -19,6 +20,10 @@ Run:
 - Recommended: `winget install --id UB-Mannheim.TesseractOCR -e`
 - Then restart your terminal/VS Code.
 - If OCR still can’t find it, set the path inside the app (OCR settings) or set env var `TESSERACT_CMD`.
+
+If `tesseract.exe` is installed but not on PATH, the default location is usually:
+
+- `C:\Program Files\Tesseract-OCR\tesseract.exe`
 
 ## Server-hosted / Linux deployment
 
