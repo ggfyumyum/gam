@@ -530,6 +530,16 @@ else:
     st.dataframe(df, use_container_width=True, height=520)
 
     st.divider()
+    st.subheader("Top 3 horses to bet (by EV)")
+    top_n = min(3, len(df))
+    top = (
+        df.sort_values(by="Bet-Back EV net ($)", ascending=False)
+        .head(top_n)
+        .loc[:, ["Horse", "Win odds", "Place odds", "Bet-Back EV net ($)"]]
+    )
+    st.dataframe(top, use_container_width=True, height=140)
+
+    st.divider()
     st.subheader("Bet-Back EV on a selected horse")
 
     horse_names = [r["horse"] for r in valid]
