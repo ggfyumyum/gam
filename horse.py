@@ -262,6 +262,38 @@ def bet_back_ev_unconditional_place(
     }
 
 
+def bet_back_net_variance_from_implied_probs(
+    *,
+    wager: float,
+    win_odds: float,
+    implied_p_win: float,
+    implied_p_place_uncond: float,
+    bonus_val: float,
+) -> float:
+    """Variance of NET profit ($) using implied probabilities.
+
+    Net outcomes (cash stake):
+      - WIN: (win_odds - 1) * wager
+      - PLACE but not win: bonus_val*wager - wager
+      - LOSE: -wager
+    Probabilities use implied P(win)=1/win_odds and implied P(place)=1/place_odds (unconditional),
+    with clamping for market inconsistencies.
+    """
+    p_win = float(implied_p_win)
+    p_place = float(implied_p_place_uncond)
+
+    p_place_not_win = max(p_place - p_win, 0.0)
+    p_lose = max(1.0 - p_place, 0.0)
+
+    win_net = (float(win_odds) - 1.0) * float(wager)
+    place_net = float(bonus_val) * float(wager) - float(wager)
+    lose_net = -float(wager)
+
+    ev_net = p_win * win_net + p_place_not_win * place_net + p_lose * lose_net
+    ev_net_sq = p_win * (win_net**2) + p_place_not_win * (place_net**2) + p_lose * (lose_net**2)
+    return max(ev_net_sq - ev_net**2, 0.0)
+
+
 def vig_from_win_place_markets(win_odds_list, place_odds_list, places=3):
     """
     WIN market:
@@ -532,12 +564,20 @@ else:
     st.divider()
     st.subheader("Top 3 horses to bet (by EV)")
     top_n = min(3, len(df))
-    top = (
-        df.sort_values(by="Bet-Back EV net ($)", ascending=False)
-        .head(top_n)
-        .loc[:, ["Horse", "Win odds", "Place odds", "Bet-Back EV net ($)"]]
+    ranked = df.sort_values(by="Bet-Back EV net ($)", ascending=False).head(top_n).copy()
+    ranked["Net variance ($^2)"] = ranked.apply(
+        lambda row: bet_back_net_variance_from_implied_probs(
+            wager=float(wager),
+            win_odds=float(row["Win odds"]),
+            implied_p_win=float(row["Implied P(win)"]),
+            implied_p_place_uncond=float(row["Implied P(place)"]),
+            bonus_val=float(bonus_val),
+        ),
+        axis=1,
     )
-    st.dataframe(top, use_container_width=True, height=140)
+    ranked["Net stdev ($)"] = ranked["Net variance ($^2)"].pow(0.5)
+    top = ranked.loc[:, ["Horse", "Win odds", "Place odds", "Bet-Back EV net ($)", "Net variance ($^2)", "Net stdev ($)"]]
+    st.dataframe(top, use_container_width=True, height=180)
 
     st.divider()
     st.subheader("Bet-Back EV on a selected horse")
